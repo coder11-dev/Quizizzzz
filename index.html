@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kahoot Clone - My Quiz</title>
+    <style>
+        body { font-family: 'Arial', sans-serif; background: #46178f; color: white; margin: 0; padding: 20px; text-align: center; }
+        .card { background: white; color: #333; border-radius: 12px; padding: 20px; max-width: 600px; margin: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+        
+        /* Kahoot Colors */
+        .opt-0 { background: #e21b3c !important; color: white; } /* Merah */
+        .opt-1 { background: #1368ce !important; color: white; } /* Biru */
+        .opt-2 { background: #d89e00 !important; color: white; } /* Kuning */
+        .opt-3 { background: #26890c !important; color: white; } /* Hijau */
+
+        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+        .btn-opt { border: none; padding: 25px 10px; font-size: 1.2rem; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.2s; min-height: 80px; }
+        .btn-opt:hover { opacity: 0.8; transform: scale(1.02); }
+        
+        input { width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        .btn-main { background: #26890c; color: white; border: none; padding: 15px; width: 100%; border-radius: 5px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .hidden { display: none; }
+        #timer { font-size: 2rem; font-weight: bold; background: white; color: #46178f; width: 60px; height: 60px; line-height: 60px; border-radius: 50%; margin: 10px auto; border: 4px solid #333; }
+    </style>
+</head>
+<body>
+
+<div id="setup-area" class="card">
+    <h2>Cipta Kuiz Ala Kahoot</h2>
+    <input type="text" id="quizTitle" placeholder="Tajuk Kuiz Anda">
+    <div id="questionInputs"></div>
+    <button class="btn-main" onclick="addQ()">+ Tambah Soalan</button>
+    <button class="btn-main" style="background:#1368ce" onclick="generateLink()">Jana Link Kongsi</button>
+    <div id="linkOutput" style="margin-top:20px; font-size: 0.8rem; word-wrap: break-word;"></div>
+</div>
+
+<div id="play-area" class="hidden">
+    <h1 id="pTitle">Tajuk</h1>
+    <div id="timer">10</div>
+    <div class="card">
+        <h2 id="pQuestion">Soalan akan muncul di sini</h2>
+        <div class="options-grid" id="pOptions"></div>
+    </div>
+</div>
+
+<div id="score-area" class="card hidden">
+    <h2>Selesai!</h2>
+    <h1 id="finalScore">0</h1>
+    <button class="btn-main" onclick="location.href=window.location.pathname">Buat Kuiz Baru</button>
+</div>
+
+<script>
+    let questCount = 0;
+    function addQ() {
+        questCount++;
+        const div = document.createElement('div');
+        div.style.borderBottom = "2px solid #eee";
+        div.style.padding = "10px 0";
+        div.innerHTML = `
+            <input type="text" placeholder="Soalan ${questCount}" class="q-txt">
+            <input type="text" placeholder="Jawapan Betul" class="q-ans">
+            <input type="text" placeholder="Salah 1" class="q-wrong">
+            <input type="text" placeholder="Salah 2" class="q-wrong">
+            <input type="text" placeholder="Salah 3" class="q-wrong">
+        `;
+        document.getElementById('questionInputs').appendChild(div);
+    }
+
+    function generateLink() {
+        let data = { t: document.getElementById('quizTitle').value, q: [] };
+        document.querySelectorAll('#questionInputs > div').forEach(d => {
+            let options = [d.querySelector('.q-ans').value, ...Array.from(d.querySelectorAll('.q-wrong')).map(i => i.value)];
+            data.q.push({
+                s: d.querySelector('.q-txt').value,
+                a: d.querySelector('.q-ans').value,
+                o: options.sort(() => Math.random() - 0.5)
+            });
+        });
+        const str = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+        const url = window.location.href.split('?')[0] + "?data=" + str;
+        document.getElementById('linkOutput').innerHTML = `Kongsi link ini: <br><input readonly value="${url}"><button onclick="navigator.clipboard.writeText('${url}'); alert('Copy!')">Salin</button>`;
+    }
+
+    // Play Logic
+    const urlParams = new URLSearchParams(window.location.search);
+    if(urlParams.has('data')) {
+        document.getElementById('setup-area').classList.add('hidden');
+        document.getElementById('play-area').classList.remove('hidden');
+        const quiz = JSON.parse(decodeURIComponent(escape(atob(urlParams.get('data')))));
+        
+        let current = 0;
+        let score = 0;
+        let timeLeft = 10;
+        let timer;
+
+        function runTimer() {
+            timeLeft = 10;
+            document.getElementById('timer').innerText = timeLeft;
+            timer = setInterval(() => {
+                timeLeft--;
+                document.getElementById('timer').innerText = timeLeft;
+                if(timeLeft <= 0) { clearInterval(timer); next(false); }
+            }, 1000);
+        }
+
+        function show() {
+            if(current >= quiz.q.length) {
+                document.getElementById('play-area').classList.add('hidden');
+                document.getElementById('score-area').classList.remove('hidden');
+                document.getElementById('finalScore').innerText = "Skor: " + score + "/" + quiz.q.length;
+                return;
+            }
+            runTimer();
+            let q = quiz.q[current];
+            document.getElementById('pTitle').innerText = quiz.t;
+            document.getElementById('pQuestion').innerText = q.s;
+            let html = "";
+            q.o.forEach((opt, i) => {
+                html += `<button class="btn-opt opt-${i}" onclick="check('${opt}')">${opt}</button>`;
+            });
+            document.getElementById('pOptions').innerHTML = html;
+        }
+
+        window.check = function(ans) {
+            clearInterval(timer);
+            if(ans === quiz.q[current].a) score++;
+            next();
+        }
+
+        function next() {
+            current++;
+            setTimeout(show, 500);
+        }
+        show();
+    } else {
+        addQ(); // Start with one question
+    }
+</script>
+</body>
+  </html>
